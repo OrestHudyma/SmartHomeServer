@@ -6,12 +6,12 @@ class TelegramUI:
     USERS = [182023875]
     API = dict()
 
-    def __init__(self, api, ui_token):
-        self.API = api
+    def __init__(self, ui_token, devices):
+        self.device_boiler = devices['boiler']
         self.bot = Bot(token=ui_token)
         self.dp = Dispatcher(self.bot)
         self.register_handlers(self.bot, self.dp)
-        executor.start_polling(self.dp, skip_updates=True, relax=2)
+        executor.start_polling(self.dp, skip_updates=True, relax=1)
 
     def register_handlers(self, bot, dp):
         users = self.USERS
@@ -24,11 +24,11 @@ class TelegramUI:
         async def process_callback_boiler(callback_query: types.CallbackQuery):
             data = callback_query.data
             if data == "boiler_on":
-                self.API["boiler_on"]()
-                await bot.send_message(callback_query.from_user.id, 'Boiler power on confirmed')
+                rsp = self.device_boiler.power_on()
+                await bot.send_message(callback_query.from_user.id, f'Boiler power on: {rsp}')
             elif data == "boiler_off":
-                self.API["boiler_off"]()
-                await bot.send_message(callback_query.from_user.id, 'Boiler power off confirmed')
+                rsp = self.device_boiler.power_off()
+                await bot.send_message(callback_query.from_user.id, f'Boiler power off: {rsp}')
 
         @dp.message_handler(commands=['boiler'])
         async def cmd_handler(message: types.Message):
