@@ -1,5 +1,5 @@
 import serial
-from serial.tools.list_ports import comports
+from serial.tools import list_ports
 import time
 import nmea
 
@@ -9,7 +9,25 @@ class Device:
         self.interface = interface
 
 
+class DeviceGlobal(Device):
+    def __init__(self, interface):
+        super().__init__(interface)
+
+    def night_light(self):
+        sentence = nmea.compose('SHGLB', 'NIGHT')
+        rsp = self.interface.transmit_fm433(sentence)
+        print('Global night light: ' + rsp)
+        return rsp
+
+    def day_light(self):
+        sentence = nmea.compose('SHGLB', 'DAY')
+        rsp = self.interface.transmit_fm433(sentence)
+        print('Global day light: ' + rsp)
+        return rsp
+
+
 class Boiler(Device):
+    DEADLINE_DELAY = 36000
 
     def __init__(self, interface):
         self.power = True
@@ -17,14 +35,14 @@ class Boiler(Device):
 
     def power_off(self):
         self.power = False
-        sentence = nmea.add_checksum('$SHBCC,OFF,') + '\n'
+        sentence = nmea.compose('SHBCC', 'OFF')
         rsp = self.interface.transmit_fm433(sentence)
         print('Boiler power off: ' + rsp)
         return rsp
 
     def power_on(self):
         self.power = True
-        sentence = nmea.add_checksum('$SHBCC,ON,') + '\n'
+        sentence = nmea.compose('SHBCC', 'ON')
         rsp = self.interface.transmit_fm433(sentence)
         print('Boiler power on: ' + rsp)
         return rsp
@@ -45,7 +63,7 @@ class HWInterface:
     com_port = None
 
     def __init__(self):
-        ports = comports()
+        ports = list_ports.comports()
         print('Available ports:')
         for port, desc, hwid in sorted(ports):
             print("{}: {} [{}]".format(port, desc, hwid))

@@ -12,3 +12,12 @@ def checksum(sentence):
 def add_checksum(sentence):
     sentence += '*' + checksum(sentence)
     return sentence
+
+
+def compose(header, cmd, params=None):
+    if params is None:
+        params = []
+    sentence = f'${header},{cmd},'
+    for param in params:
+        sentence += param + ','
+    return add_checksum(sentence) + '\n'

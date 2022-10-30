@@ -11,16 +11,12 @@ if __name__ == '__main__':
         secrets = json.load(f)
 
     hw_interface = periphery.HWInterface()
+    device_global = periphery.DeviceGlobal(hw_interface)
     boiler = periphery.Boiler(hw_interface)
 
     devices = {
+        'global':       device_global,
         'boiler':       boiler
     }
 
-    api = {'boiler_on':     boiler.power_on,
-           'boiler_off':    boiler.power_off}
-
     ti = TelegramUI(secrets['SmartHome bot token'], devices)
-
-    while True:
-        pass
