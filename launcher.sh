@@ -1,7 +1,9 @@
 #!/bin/bash
 
+echo "Updating Server..."
+branch=$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/(\1)/')
+echo Current branch is ${branch}
 git pull
-#python3 main.py
 
 if hash py; then
     echo "Python detected under py alias"
