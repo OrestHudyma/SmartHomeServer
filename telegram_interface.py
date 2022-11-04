@@ -28,7 +28,9 @@ class TelegramUI:
             key_on = types.InlineKeyboardButton(text='Turn on', callback_data='boiler_on')
             key_off = types.InlineKeyboardButton(text='Turn off', callback_data='boiler_off')
             keyboard.add(key_on, key_off)
-            await bot.send_message(message.from_user.id, text='Set boiler power', reply_markup=keyboard)
+            await bot.send_message(message.from_user.id,
+                                   text='Boiler power status: ' + str(self.device_boiler.power),
+                                   reply_markup=keyboard)
 
         @dp.callback_query_handler(lambda c: c.data and c.data.startswith('boiler'))
         async def process_callback_boiler(callback_query: types.CallbackQuery):
