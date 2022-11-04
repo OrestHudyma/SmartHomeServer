@@ -1,18 +1,19 @@
 #!/bin/bash
+shopt -s expand_aliases
 
 echo "Updating Server..."
 branch=$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/(\1)/')
 echo Current branch is ${branch}
 git pull
 
-if hash py; then
+if hash pyt; then
     echo "Python detected under py alias"
 elif hash python3; then
-  alias py='python3'
+  alias pyt='python3'
   echo "Python3 detected"
 elif hash python; then
-  alias py='python'
+  alias pyt='python'
   echo "Python detected"
 fi
 
-py -u main.py
+pyt -u main.py
