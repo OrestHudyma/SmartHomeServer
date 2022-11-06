@@ -54,6 +54,47 @@ class Boiler(Device):
             self.power_off()
 
 
+class FitoLamp(Device):
+    def __init__(self, interface, device_id):
+        self.power = True
+        self.device_id = device_id
+        super().__init__(interface)
+
+    def power_off(self):
+        self.power = False
+        sentence = nmea.compose('SHFTL', 'OFF', [self.device_id])
+        rsp = self.interface.transmit_fm433(sentence)
+        print('Fito lamp power off: ' + rsp)
+        return rsp
+
+    def power_on(self):
+        self.power = True
+        sentence = nmea.compose('SHFTL', 'ON', [self.device_id])
+        rsp = self.interface.transmit_fm433(sentence)
+        print('Fito lamp power on: ' + rsp)
+        return rsp
+
+    def power_off_fast(self):
+        self.power = False
+        sentence = nmea.compose('SHFTL', 'FOFF', [self.device_id])
+        rsp = self.interface.transmit_fm433(sentence)
+        print('Fito lamp power off: ' + rsp)
+        return rsp
+
+    def power_on_fast(self):
+        self.power = True
+        sentence = nmea.compose('SHFTL', 'FON', [self.device_id])
+        rsp = self.interface.transmit_fm433(sentence)
+        print('Fito lamp power on: ' + rsp)
+        return rsp
+
+    def refresh(self):
+        if self.power:
+            self.power_on()
+        else:
+            self.power_off()
+
+
 class HWInterface:
 
     FM433_REPEAT_COUNT = 3

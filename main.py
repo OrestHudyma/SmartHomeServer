@@ -13,10 +13,12 @@ if __name__ == '__main__':
     hw_interface = periphery.HWInterface()
     device_global = periphery.DeviceGlobal(hw_interface)
     boiler = periphery.Boiler(hw_interface)
+    fito_lamp = periphery.FitoLamp(hw_interface, '1')
 
     devices = {
         'global':       device_global,
-        'boiler':       boiler
+        'boiler':       boiler,
+        'fito_lamp':    fito_lamp
     }
 
     ti = TelegramUI(secrets['SmartHome bot token'], devices)
