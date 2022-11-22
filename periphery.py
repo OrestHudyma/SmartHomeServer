@@ -27,7 +27,8 @@ class DeviceGlobal(Device):
 
 
 class Boiler(Device):
-    DEADLINE_DELAY = 36000
+
+    OVERRIDE_TIMEOUT = 36000
 
     def __init__(self, interface):
         self.power = True
@@ -55,6 +56,9 @@ class Boiler(Device):
 
 
 class FitoLamp(Device):
+
+    OVERRIDE_TIMEOUT = 10800
+
     def __init__(self, interface, device_id):
         self.power = True
         self.device_id = device_id

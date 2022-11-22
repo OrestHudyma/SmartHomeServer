@@ -1,3 +1,10 @@
+""" This is aiogram based telegram interface
+Commands list:
+boiler - Boiler control
+fito_lamp - Fito Lamp control
+global - Global functions
+"""
+
 from aiogram import Bot, Dispatcher, executor, types
 
 
