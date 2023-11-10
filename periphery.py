@@ -27,11 +27,12 @@ class DeviceGlobal(Device):
 
 
 class Boiler(Device):
-
+    """ Boiler representation. Can only be turned on if enabled. """
     OVERRIDE_TIMEOUT = 36000
 
     def __init__(self, interface):
         self.power = True
+        self.enabled = True
         super().__init__(interface)
 
     def power_off(self):
@@ -42,14 +43,17 @@ class Boiler(Device):
         return rsp
 
     def power_on(self):
-        self.power = True
-        sentence = nmea.compose('SHBCC', 'ON')
-        rsp = self.interface.transmit_fm433(sentence)
+        if self.enabled:
+            self.power = True
+            sentence = nmea.compose('SHBCC', 'ON')
+            rsp = self.interface.transmit_fm433(sentence)
+        else:
+            rsp = 'Cannot complete. Boiler disabled.'
         print('Boiler power on: ' + rsp)
         return rsp
 
     def refresh(self):
-        if self.power:
+        if self.power and self.enabled:
             self.power_on()
         else:
             self.power_off()

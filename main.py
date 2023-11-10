@@ -8,7 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram_interface import TelegramUI
 import periphery
 
-DEVICE_REFRESH_INTERVAL = 1
+DEVICE_REFRESH_INTERVAL = 1  # Device refresh interval in hours
 
 
 if __name__ == '__main__':
@@ -33,12 +33,14 @@ if __name__ == '__main__':
     ]
 
     def refresh_job(api):
+        print('Executing refresh procedures...')
         for func in api:
             func()
             time.sleep(1)
+        print('Refresh procedures completed.')
 
     refresher = AsyncIOScheduler()
-    refresher.add_job(refresh_job, 'interval', args=refresh_api, hours=DEVICE_REFRESH_INTERVAL)
+    refresher.add_job(refresh_job, 'interval', args=[refresh_api], hours=DEVICE_REFRESH_INTERVAL)
     refresher.start()
 
     # Main schedule
@@ -55,3 +57,4 @@ if __name__ == '__main__':
             asyncio.get_event_loop().run_forever()
     except (KeyboardInterrupt, SystemExit):
         refresher.shutdown()
+        schedule.shutdown()

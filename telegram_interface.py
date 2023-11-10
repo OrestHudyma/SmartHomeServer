@@ -35,9 +35,12 @@ class TelegramUI:
             keyboard = types.InlineKeyboardMarkup(row_width=2)
             key_on = types.InlineKeyboardButton(text='Turn on', callback_data='boiler_on')
             key_off = types.InlineKeyboardButton(text='Turn off', callback_data='boiler_off')
-            keyboard.add(key_on, key_off)
+            key_enable = types.InlineKeyboardButton(text='Enable', callback_data='boiler_enable')
+            key_disable = types.InlineKeyboardButton(text='Disable', callback_data='boiler_disable')
+            keyboard.add(key_on, key_off, key_enable, key_disable)
             await bot.send_message(message.from_user.id,
-                                   text='Boiler power status: ' + str(self.device_boiler.power),
+                                   text=f'Boiler power: {str(self.device_boiler.power)} \n'
+                                        f'Boiler enabled: {str(self.device_boiler.power)}',
                                    reply_markup=keyboard)
 
         @dp.callback_query_handler(lambda c: c.data and c.data.startswith('boiler'))
@@ -49,6 +52,12 @@ class TelegramUI:
             elif data == "boiler_off":
                 rsp = self.device_boiler.power_off()
                 await bot.send_message(callback_query.from_user.id, f'Boiler power off: {rsp}')
+            elif data == "boiler_enable":
+                self.device_boiler.enabled = True
+                await bot.send_message(callback_query.from_user.id, 'Boiler enabled')
+            elif data == "boiler_disable":
+                self.device_boiler.enabled = False
+                await bot.send_message(callback_query.from_user.id, 'Boiler disabled')
 
         # Fito Lamp
         @dp.message_handler(commands=['fito_lamp'])
