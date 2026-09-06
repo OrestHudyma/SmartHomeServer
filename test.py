@@ -31,6 +31,28 @@ class NmeaTests(unittest.TestCase):
 
         self.assertEqual(sentence, nmea.add_checksum('$SHFTL,ON,1,') + '\n')
 
+    def test_boiler_wire_frames_match_firmware_contract(self):
+        self.assertEqual(nmea.compose('SHBCC', 'ON'), '$SHBCC,ON,*58\n')
+        self.assertEqual(nmea.compose('SHBCC', 'OFF'), '$SHBCC,OFF,*16\n')
+
+    def test_fito_lamp_wire_frames_match_firmware_contract(self):
+        self.assertEqual(
+            nmea.compose('SHFTL', 'ON', ['1']),
+            '$SHFTL,ON,1,*59\n',
+        )
+        self.assertEqual(
+            nmea.compose('SHFTL', 'OFF', ['1']),
+            '$SHFTL,OFF,1,*17\n',
+        )
+        self.assertEqual(
+            nmea.compose('SHFTL', 'FON', ['1']),
+            '$SHFTL,FON,1,*1F\n',
+        )
+        self.assertEqual(
+            nmea.compose('SHFTL', 'FOFF', ['1']),
+            '$SHFTL,FOFF,1,*51\n',
+        )
+
 
 class BoilerTests(unittest.TestCase):
     def setUp(self):
