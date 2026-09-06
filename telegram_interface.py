@@ -40,7 +40,7 @@ class TelegramUI:
             keyboard.add(key_on, key_off, key_enable, key_disable)
             await bot.send_message(message.from_user.id,
                                    text=f'Boiler power: {str(self.device_boiler.power)} \n'
-                                        f'Boiler enabled: {str(self.device_boiler.power)}',
+                                        f'Boiler enabled: {str(self.device_boiler.enabled)}',
                                    reply_markup=keyboard)
 
         @dp.callback_query_handler(lambda c: c.data and c.data.startswith('boiler'))
@@ -56,6 +56,7 @@ class TelegramUI:
                 self.device_boiler.enabled = True
                 await bot.send_message(callback_query.from_user.id, 'Boiler enabled')
             elif data == "boiler_disable":
+                rsp = self.device_boiler.power_off()
                 self.device_boiler.enabled = False
                 await bot.send_message(callback_query.from_user.id, 'Boiler disabled')
 
