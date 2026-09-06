@@ -36,17 +36,19 @@ class Boiler(Device):
         super().__init__(interface)
 
     def power_off(self):
-        self.power = False
         sentence = nmea.compose('SHBCC', 'OFF')
         rsp = self.interface.transmit_fm433(sentence)
+        if rsp == 'ok':
+            self.power = False
         print('Boiler power off: ' + rsp)
         return rsp
 
     def power_on(self):
         if self.enabled:
-            self.power = True
             sentence = nmea.compose('SHBCC', 'ON')
             rsp = self.interface.transmit_fm433(sentence)
+            if rsp == 'ok':
+                self.power = True
         else:
             rsp = 'Cannot complete. Boiler disabled.'
         print('Boiler power on: ' + rsp)

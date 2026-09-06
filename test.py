@@ -1,8 +1,14 @@
+from contextlib import ExitStack
+import os
+from pathlib import Path
+import runpy
+import tempfile
 import unittest
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import nmea
 import periphery
+import telegram_interface
 
 
 class NmeaTests(unittest.TestCase):
@@ -40,6 +46,14 @@ class BoilerTests(unittest.TestCase):
             nmea.compose('SHBCC', 'OFF')
         )
 
+    def test_power_off_keeps_state_when_transmission_fails(self):
+        self.interface.transmit_fm433.return_value = 'error'
+
+        response = self.boiler.power_off()
+
+        self.assertTrue(self.boiler.power)
+        self.assertEqual(response, 'error')
+
     def test_power_on_sends_command_when_enabled(self):
         self.boiler.power = False
 
@@ -50,6 +64,15 @@ class BoilerTests(unittest.TestCase):
         self.interface.transmit_fm433.assert_called_once_with(
             nmea.compose('SHBCC', 'ON')
         )
+
+    def test_power_on_keeps_state_when_transmission_fails(self):
+        self.boiler.power = False
+        self.interface.transmit_fm433.return_value = 'error'
+
+        response = self.boiler.power_on()
+
+        self.assertFalse(self.boiler.power)
+        self.assertEqual(response, 'error')
 
     def test_power_on_does_not_send_command_when_disabled(self):
         self.boiler.power = False
@@ -79,6 +102,174 @@ class FitoLampTests(unittest.TestCase):
                 call(nmea.compose('SHFTL', 'FON', ['7'])),
             ],
         )
+
+
+class HandlerRegistry:
+    def __init__(self):
+        self.callback_handlers = []
+
+    def message_handler(self, *args, **kwargs):
+        return lambda handler: handler
+
+    def callback_query_handler(self, *args, **kwargs):
+        def register(handler):
+            self.callback_handlers.append(handler)
+            return handler
+
+        return register
+
+
+class TelegramUIRunTests(unittest.TestCase):
+    @patch('telegram_interface.executor.start_polling')
+    def test_run_starts_polling(self, start_polling):
+        ui = telegram_interface.TelegramUI.__new__(telegram_interface.TelegramUI)
+        ui.dp = MagicMock()
+
+        ui.run()
+
+        start_polling.assert_called_once_with(
+            ui.dp,
+            skip_updates=True,
+            relax=1,
+        )
+
+
+class TelegramUICallbackTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.boiler = MagicMock()
+        self.ui = telegram_interface.TelegramUI.__new__(
+            telegram_interface.TelegramUI
+        )
+        self.ui.device_global = MagicMock()
+        self.ui.device_boiler = self.boiler
+        self.ui.device_fito_lamp = MagicMock()
+        self.bot = MagicMock()
+        self.bot.send_message = AsyncMock()
+        self.dispatcher = HandlerRegistry()
+        self.ui.register_handlers(self.bot, self.dispatcher)
+        self.boiler_callback = self.dispatcher.callback_handlers[0]
+
+    def make_callback(self):
+        callback = MagicMock()
+        callback.data = 'boiler_disable'
+        callback.from_user.id = 123
+        return callback
+
+    async def test_disable_reports_successful_power_off(self):
+        self.boiler.power_off.return_value = 'ok'
+
+        await self.boiler_callback(self.make_callback())
+
+        self.assertFalse(self.boiler.enabled)
+        self.boiler.power_off.assert_called_once_with()
+        self.bot.send_message.assert_awaited_once_with(
+            123,
+            'Boiler disabled and powered off',
+        )
+
+    async def test_disable_reports_failed_power_off(self):
+        self.boiler.power_off.return_value = 'error'
+
+        await self.boiler_callback(self.make_callback())
+
+        self.assertFalse(self.boiler.enabled)
+        self.boiler.power_off.assert_called_once_with()
+        self.bot.send_message.assert_awaited_once_with(
+            123,
+            "Boiler disabled, but power off failed: 'error'",
+        )
+
+
+class MainLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.hardware = MagicMock()
+        self.hardware.com_port = object()
+        self.global_device = MagicMock()
+        self.boiler = MagicMock()
+        self.fito_lamp = MagicMock()
+        self.refresher = MagicMock()
+        self.schedule = MagicMock()
+        self.scheduler_factory = MagicMock(
+            side_effect=[self.refresher, self.schedule]
+        )
+        self.ui = MagicMock()
+        self.ui_class = MagicMock(return_value=self.ui)
+
+    def run_main(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            secrets_path = Path(temp_dir) / 'secrets.json'
+            secrets_path.write_text(
+                '{"SmartHome bot token": "token"}',
+                encoding='utf-8',
+            )
+
+            with ExitStack() as stack:
+                stack.enter_context(
+                    patch.dict(
+                        os.environ,
+                        {'SmartHome_secrets': str(secrets_path)},
+                    )
+                )
+                stack.enter_context(
+                    patch('periphery.HWInterface', return_value=self.hardware)
+                )
+                stack.enter_context(
+                    patch(
+                        'periphery.DeviceGlobal',
+                        return_value=self.global_device,
+                    )
+                )
+                stack.enter_context(
+                    patch('periphery.Boiler', return_value=self.boiler)
+                )
+                stack.enter_context(
+                    patch('periphery.FitoLamp', return_value=self.fito_lamp)
+                )
+                stack.enter_context(
+                    patch(
+                        'apscheduler.schedulers.asyncio.AsyncIOScheduler',
+                        self.scheduler_factory,
+                    )
+                )
+                stack.enter_context(
+                    patch('telegram_interface.TelegramUI', self.ui_class)
+                )
+                return runpy.run_path(
+                    str(Path(__file__).with_name('main.py')),
+                    run_name='__main__',
+                )
+
+    def test_runs_polling_and_shuts_down_schedulers(self):
+        self.run_main()
+
+        self.ui.run.assert_called_once_with()
+        self.refresher.shutdown.assert_called_once_with()
+        self.schedule.shutdown.assert_called_once_with()
+        self.schedule.add_job.assert_has_calls(
+            [
+                call(self.boiler.power_on, 'cron', hour=5),
+                call(self.boiler.power_off, 'cron', hour=22),
+            ]
+        )
+
+    def test_shuts_down_schedulers_when_polling_fails(self):
+        self.ui.run.side_effect = RuntimeError('Polling failed')
+
+        with self.assertRaisesRegex(RuntimeError, 'Polling failed'):
+            self.run_main()
+
+        self.refresher.shutdown.assert_called_once_with()
+        self.schedule.shutdown.assert_called_once_with()
+
+    def test_stops_before_starting_schedulers_without_hardware(self):
+        self.hardware.com_port = None
+
+        with self.assertRaises(SystemExit) as error:
+            self.run_main()
+
+        self.assertEqual(error.exception.code, 1)
+        self.scheduler_factory.assert_not_called()
+        self.ui_class.assert_not_called()
 
 
 class HWInterfaceTests(unittest.TestCase):

@@ -20,6 +20,8 @@ class TelegramUI:
         self.bot = Bot(token=ui_token)
         self.dp = Dispatcher(self.bot)
         self.register_handlers(self.bot, self.dp)
+
+    def run(self):
         executor.start_polling(self.dp, skip_updates=True, relax=1)
 
     def register_handlers(self, bot, dp):
@@ -56,9 +58,15 @@ class TelegramUI:
                 self.device_boiler.enabled = True
                 await bot.send_message(callback_query.from_user.id, 'Boiler enabled')
             elif data == "boiler_disable":
-                rsp = self.device_boiler.power_off()
                 self.device_boiler.enabled = False
-                await bot.send_message(callback_query.from_user.id, 'Boiler disabled')
+                rsp = self.device_boiler.power_off()
+
+                if rsp == 'ok':
+                    text = 'Boiler disabled and powered off'
+                else:
+                    text = f'Boiler disabled, but power off failed: {rsp!r}'
+
+                await bot.send_message(callback_query.from_user.id, text)
 
         # Fito Lamp
         @dp.message_handler(commands=['fito_lamp'])
