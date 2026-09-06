@@ -1,5 +1,6 @@
 import serial
 from serial.tools import list_ports
+import threading
 import time
 import nmea
 
@@ -114,6 +115,7 @@ class HWInterface:
     com_port = None
 
     def __init__(self):
+        self._transmit_lock = threading.Lock()
         ports = list_ports.comports()
         print('Available ports:')
         for port, desc, hwid in sorted(ports):
@@ -151,12 +153,13 @@ class HWInterface:
         return rsp == 'ok'
 
     def transmit_fm433(self, data):
-        rsp = ''
-        for _ in range(self.FM433_REPEAT_COUNT):
-            self.com_port.write(data.encode())
-            rsp = self.com_port.readline().decode().rstrip('\r\n')
-            if rsp != 'ok':
-                print(f'FM433 transmission error (response {rsp})')
-                return rsp
-            time.sleep(self.FM433_REPEAT_DELAY)
-        return rsp
+        with self._transmit_lock:
+            rsp = ''
+            for _ in range(self.FM433_REPEAT_COUNT):
+                self.com_port.write(data.encode())
+                rsp = self.com_port.readline().decode().rstrip('\r\n')
+                if rsp != 'ok':
+                    print(f'FM433 transmission error (response {rsp})')
+                    return rsp
+                time.sleep(self.FM433_REPEAT_DELAY)
+            return rsp

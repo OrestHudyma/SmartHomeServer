@@ -17,9 +17,9 @@ if __name__ == '__main__':
 
     # Initialize hardware interface and devices
     hw_interface = periphery.HWInterface()
-    if not hw_interface.com_port:
+    if hw_interface.com_port == None:
         print('FATAL:Hardware initialization failed. COM port not found.')
-        exit(1)
+        raise SystemExit(1)
 
     device_global = periphery.DeviceGlobal(hw_interface)
     boiler = periphery.Boiler(hw_interface)

@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import runpy
 import tempfile
+import threading
 import unittest
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -137,47 +138,79 @@ class TelegramUIRunTests(unittest.TestCase):
 class TelegramUICallbackTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.boiler = MagicMock()
+        self.global_device = MagicMock()
+        self.fito_lamp = MagicMock()
         self.ui = telegram_interface.TelegramUI.__new__(
             telegram_interface.TelegramUI
         )
-        self.ui.device_global = MagicMock()
+        self.ui.device_global = self.global_device
         self.ui.device_boiler = self.boiler
-        self.ui.device_fito_lamp = MagicMock()
+        self.ui.device_fito_lamp = self.fito_lamp
         self.bot = MagicMock()
         self.bot.send_message = AsyncMock()
         self.dispatcher = HandlerRegistry()
         self.ui.register_handlers(self.bot, self.dispatcher)
         self.boiler_callback = self.dispatcher.callback_handlers[0]
+        self.to_thread_patcher = patch(
+            'telegram_interface.asyncio.to_thread',
+            new_callable=AsyncMock,
+        )
+        self.to_thread = self.to_thread_patcher.start()
+        self.addCleanup(self.to_thread_patcher.stop)
 
-    def make_callback(self):
+    def make_callback(self, data='boiler_disable'):
         callback = MagicMock()
-        callback.data = 'boiler_disable'
+        callback.data = data
         callback.from_user.id = 123
         return callback
 
     async def test_disable_reports_successful_power_off(self):
-        self.boiler.power_off.return_value = 'ok'
+        self.to_thread.return_value = 'ok'
 
         await self.boiler_callback(self.make_callback())
 
         self.assertFalse(self.boiler.enabled)
-        self.boiler.power_off.assert_called_once_with()
+        self.to_thread.assert_awaited_once_with(self.boiler.power_off)
         self.bot.send_message.assert_awaited_once_with(
             123,
             'Boiler disabled and powered off',
         )
 
     async def test_disable_reports_failed_power_off(self):
-        self.boiler.power_off.return_value = 'error'
+        self.to_thread.return_value = 'error'
 
         await self.boiler_callback(self.make_callback())
 
         self.assertFalse(self.boiler.enabled)
-        self.boiler.power_off.assert_called_once_with()
+        self.to_thread.assert_awaited_once_with(self.boiler.power_off)
         self.bot.send_message.assert_awaited_once_with(
             123,
             "Boiler disabled, but power off failed: 'error'",
         )
+
+    async def test_hardware_callbacks_are_offloaded_to_threads(self):
+        cases = [
+            (0, 'boiler_on', self.boiler.power_on),
+            (0, 'boiler_off', self.boiler.power_off),
+            (1, 'fito_lamp_on', self.fito_lamp.power_on),
+            (1, 'fito_lamp_off', self.fito_lamp.power_off),
+            (1, 'fito_lamp_fon', self.fito_lamp.power_on_fast),
+            (1, 'fito_lamp_foff', self.fito_lamp.power_off_fast),
+            (2, 'global_night_light', self.global_device.night_light),
+            (2, 'global_day_light', self.global_device.day_light),
+        ]
+
+        for handler_index, data, command in cases:
+            with self.subTest(data=data):
+                self.to_thread.reset_mock()
+                self.bot.send_message.reset_mock()
+                self.to_thread.return_value = 'ok'
+
+                await self.dispatcher.callback_handlers[handler_index](
+                    self.make_callback(data)
+                )
+
+                self.to_thread.assert_awaited_once_with(command)
 
 
 class MainLifecycleTests(unittest.TestCase):
@@ -370,6 +403,7 @@ class HWInterfaceTests(unittest.TestCase):
     def test_transmit_repeats_successful_command(self, sleep):
         interface = periphery.HWInterface.__new__(periphery.HWInterface)
         interface.com_port = MagicMock()
+        interface._transmit_lock = threading.Lock()
         interface.com_port.readline.side_effect = [b'ok\r\n'] * 3
 
         response = interface.transmit_fm433('payload')
@@ -385,6 +419,7 @@ class HWInterfaceTests(unittest.TestCase):
     def test_transmit_stops_on_first_error(self, sleep):
         interface = periphery.HWInterface.__new__(periphery.HWInterface)
         interface.com_port = MagicMock()
+        interface._transmit_lock = threading.Lock()
         interface.com_port.readline.side_effect = [b'ok\r\n', b'error\r\n']
 
         response = interface.transmit_fm433('payload')
@@ -392,6 +427,18 @@ class HWInterfaceTests(unittest.TestCase):
         self.assertEqual(response, 'error')
         self.assertEqual(interface.com_port.write.call_count, 2)
         sleep.assert_called_once_with(interface.FM433_REPEAT_DELAY)
+
+    @patch('periphery.time.sleep')
+    def test_transmit_holds_lock_for_entire_command(self, _sleep):
+        interface = periphery.HWInterface.__new__(periphery.HWInterface)
+        interface.com_port = MagicMock()
+        interface.com_port.readline.side_effect = [b'ok\r\n'] * 3
+        interface._transmit_lock = MagicMock()
+
+        self.assertEqual(interface.transmit_fm433('payload'), 'ok')
+
+        interface._transmit_lock.__enter__.assert_called_once_with()
+        interface._transmit_lock.__exit__.assert_called_once()
 
 
 if __name__ == '__main__':
