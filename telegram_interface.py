@@ -5,6 +5,8 @@ fito_lamp - Fito Lamp control
 global - Global functions
 """
 
+import asyncio
+
 from aiogram import Bot, Dispatcher, executor, types
 
 
@@ -20,6 +22,8 @@ class TelegramUI:
         self.bot = Bot(token=ui_token)
         self.dp = Dispatcher(self.bot)
         self.register_handlers(self.bot, self.dp)
+
+    def run(self):
         executor.start_polling(self.dp, skip_updates=True, relax=1)
 
     def register_handlers(self, bot, dp):
@@ -40,24 +44,31 @@ class TelegramUI:
             keyboard.add(key_on, key_off, key_enable, key_disable)
             await bot.send_message(message.from_user.id,
                                    text=f'Boiler power: {str(self.device_boiler.power)} \n'
-                                        f'Boiler enabled: {str(self.device_boiler.power)}',
+                                        f'Boiler enabled: {str(self.device_boiler.enabled)}',
                                    reply_markup=keyboard)
 
         @dp.callback_query_handler(lambda c: c.data and c.data.startswith('boiler'))
         async def process_callback_boiler(callback_query: types.CallbackQuery):
             data = callback_query.data
             if data == "boiler_on":
-                rsp = self.device_boiler.power_on()
+                rsp = await asyncio.to_thread(self.device_boiler.power_on)
                 await bot.send_message(callback_query.from_user.id, f'Boiler power on: {rsp}')
             elif data == "boiler_off":
-                rsp = self.device_boiler.power_off()
+                rsp = await asyncio.to_thread(self.device_boiler.power_off)
                 await bot.send_message(callback_query.from_user.id, f'Boiler power off: {rsp}')
             elif data == "boiler_enable":
                 self.device_boiler.enabled = True
                 await bot.send_message(callback_query.from_user.id, 'Boiler enabled')
             elif data == "boiler_disable":
                 self.device_boiler.enabled = False
-                await bot.send_message(callback_query.from_user.id, 'Boiler disabled')
+                rsp = await asyncio.to_thread(self.device_boiler.power_off)
+
+                if rsp == 'ok':
+                    text = 'Boiler disabled and powered off'
+                else:
+                    text = f'Boiler disabled, but power off failed: {rsp!r}'
+
+                await bot.send_message(callback_query.from_user.id, text)
 
         # Fito Lamp
         @dp.message_handler(commands=['fito_lamp'])
@@ -76,16 +87,16 @@ class TelegramUI:
         async def process_callback_fito_lamp(callback_query: types.CallbackQuery):
             data = callback_query.data
             if data == "fito_lamp_on":
-                rsp = self.device_fito_lamp.power_on()
+                rsp = await asyncio.to_thread(self.device_fito_lamp.power_on)
                 await bot.send_message(callback_query.from_user.id, f'Fito Lamp power on: {rsp}')
             elif data == "fito_lamp_off":
-                rsp = self.device_fito_lamp.power_off()
+                rsp = await asyncio.to_thread(self.device_fito_lamp.power_off)
                 await bot.send_message(callback_query.from_user.id, f'Fito Lamp power off: {rsp}')
             elif data == "fito_lamp_fon":
-                rsp = self.device_fito_lamp.power_on_fast()
+                rsp = await asyncio.to_thread(self.device_fito_lamp.power_on_fast)
                 await bot.send_message(callback_query.from_user.id, f'Fito Lamp power on: {rsp}')
             elif data == "fito_lamp_foff":
-                rsp = self.device_fito_lamp.power_off_fast()
+                rsp = await asyncio.to_thread(self.device_fito_lamp.power_off_fast)
                 await bot.send_message(callback_query.from_user.id, f'Fito Lamp power off: {rsp}')
 
         # Global
@@ -101,10 +112,10 @@ class TelegramUI:
         async def process_callback_boiler(callback_query: types.CallbackQuery):
             data = callback_query.data
             if data == "global_night_light":
-                rsp = self.device_global.night_light()
+                rsp = await asyncio.to_thread(self.device_global.night_light)
                 await bot.send_message(callback_query.from_user.id, f'Night light mode: {rsp}')
             elif data == "global_day_light":
-                rsp = self.device_global.day_light()
+                rsp = await asyncio.to_thread(self.device_global.day_light)
                 await bot.send_message(callback_query.from_user.id, f'Day light mode: {rsp}')
 
 

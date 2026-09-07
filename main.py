@@ -1,6 +1,5 @@
 import json
 import os
-import asyncio
 import time
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -16,7 +15,12 @@ if __name__ == '__main__':
     with open(os.environ['SmartHome_secrets']) as f:
         secrets = json.load(f)
 
+    # Initialize hardware interface and devices
     hw_interface = periphery.HWInterface()
+    if hw_interface.com_port == None:
+        print('FATAL:Hardware initialization failed. COM port not found.')
+        raise SystemExit(1)
+
     device_global = periphery.DeviceGlobal(hw_interface)
     boiler = periphery.Boiler(hw_interface)
     fito_lamp = periphery.FitoLamp(hw_interface, '1')
@@ -46,15 +50,13 @@ if __name__ == '__main__':
     # Main schedule
     schedule = AsyncIOScheduler()
     schedule.add_job(boiler.power_on, 'cron', hour=5)
-    schedule.add_job(boiler.power_off, 'cron', hour=23)
+    schedule.add_job(boiler.power_off, 'cron', hour=22)
     print(schedule.print_jobs())
     schedule.start()
 
-    ti = TelegramUI(secrets['SmartHome bot token'], devices)
-
     try:
-        while True:
-            asyncio.get_event_loop().run_forever()
-    except (KeyboardInterrupt, SystemExit):
+        ti = TelegramUI(secrets['SmartHome bot token'], devices)
+        ti.run()
+    finally:
         refresher.shutdown()
         schedule.shutdown()
