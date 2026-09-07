@@ -44,22 +44,59 @@ command -v git >/dev/null 2>&1 || fail "git is not installed"
 command -v flock >/dev/null 2>&1 || fail "flock is not installed"
 command -v timeout >/dev/null 2>&1 || fail "timeout is not installed"
 
-if [[ -n "${SMARTHOME_PYTHON:-}" ]]; then
-    python_bin="$SMARTHOME_PYTHON"
-    if [[ "$python_bin" != */* ]]; then
-        if ! python_bin="$(command -v "$python_bin")"; then
-            fail "Python command is not found: $SMARTHOME_PYTHON"
-        fi
+resolve_python() {
+    local candidate="$1"
+
+    if [[ "$candidate" == */* ]]; then
+        [[ -x "$candidate" ]] || return 1
+        printf '%s\n' "$candidate"
+    else
+        command -v "$candidate" 2>/dev/null
     fi
-elif [[ -x "$project_dir/.venv/bin/python" ]]; then
-    python_bin="$project_dir/.venv/bin/python"
-elif command -v python3 >/dev/null 2>&1; then
-    python_bin="$(command -v python3)"
+}
+
+python_runtime_is_usable() {
+    "$1" -c '
+import sys
+if sys.version_info < (3, 8):
+    raise SystemExit(1)
+import serial
+from serial.tools import list_ports
+from aiogram import Bot, Dispatcher, executor, types
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+' >/dev/null 2>&1
+}
+
+if [[ -n "${SMARTHOME_PYTHON:-}" ]]; then
+    if ! python_bin="$(resolve_python "$SMARTHOME_PYTHON")"; then
+        fail "Python command is not found: $SMARTHOME_PYTHON"
+    fi
+    if ! python_runtime_is_usable "$python_bin"; then
+        fail "Python is incompatible or missing required packages: $python_bin"
+    fi
 else
-    fail "Python 3 is not installed"
+    python_bin=""
+    # The deployed server provides its configured interpreter as `pyt`.
+    # Keep it ahead of generic system Python commands.
+    for python_candidate in \
+        pyt \
+        "$project_dir/.venv/bin/python" \
+        python3 \
+        python; do
+        if resolved_python="$(resolve_python "$python_candidate")" && \
+            python_runtime_is_usable "$resolved_python"; then
+            python_bin="$resolved_python"
+            break
+        fi
+    done
+
+    [[ -n "$python_bin" ]] || \
+        fail "No compatible Python 3.8+ interpreter with required packages was found"
 fi
 
 [[ -x "$python_bin" ]] || fail "Python is not executable: $python_bin"
+python_version="$("$python_bin" --version 2>&1)"
+log "Using Python: $python_bin ($python_version)"
 [[ -n "$secrets_path" ]] || fail "SmartHome_secrets is not set"
 [[ -f "$secrets_path" && -r "$secrets_path" ]] || \
     fail "Secrets file is not readable: $secrets_path"

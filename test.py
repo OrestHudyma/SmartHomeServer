@@ -12,6 +12,22 @@ import periphery
 import telegram_interface
 
 
+class LauncherTests(unittest.TestCase):
+    def test_python_search_prefers_pyt_and_validates_candidates(self):
+        launcher = Path(__file__).with_name('launcher.sh').read_text(
+            encoding='utf-8'
+        )
+        candidates_start = launcher.index('for python_candidate in')
+        candidates_end = launcher.index('; do', candidates_start)
+        candidates = launcher[candidates_start:candidates_end]
+
+        self.assertLess(candidates.index('pyt'), candidates.index('python3'))
+        self.assertIn(
+            'python_runtime_is_usable "$resolved_python"',
+            launcher,
+        )
+
+
 class NmeaTests(unittest.TestCase):
     def test_checksum_matches_known_nmea_sentence(self):
         sentence = (
