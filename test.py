@@ -157,6 +157,16 @@ class TelegramUIRunTests(unittest.TestCase):
         )
 
 
+class ThreadOffloadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_run_in_thread_executes_blocking_call(self):
+        command = MagicMock(return_value='ok')
+
+        result = await telegram_interface._run_in_thread(command, 'value')
+
+        self.assertEqual(result, 'ok')
+        command.assert_called_once_with('value')
+
+
 class TelegramUICallbackTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.boiler = MagicMock()
@@ -173,12 +183,12 @@ class TelegramUICallbackTests(unittest.IsolatedAsyncioTestCase):
         self.dispatcher = HandlerRegistry()
         self.ui.register_handlers(self.bot, self.dispatcher)
         self.boiler_callback = self.dispatcher.callback_handlers[0]
-        self.to_thread_patcher = patch(
-            'telegram_interface.asyncio.to_thread',
+        self.run_in_thread_patcher = patch(
+            'telegram_interface._run_in_thread',
             new_callable=AsyncMock,
         )
-        self.to_thread = self.to_thread_patcher.start()
-        self.addCleanup(self.to_thread_patcher.stop)
+        self.run_in_thread = self.run_in_thread_patcher.start()
+        self.addCleanup(self.run_in_thread_patcher.stop)
 
     def make_callback(self, data='boiler_disable'):
         callback = MagicMock()
@@ -187,24 +197,24 @@ class TelegramUICallbackTests(unittest.IsolatedAsyncioTestCase):
         return callback
 
     async def test_disable_reports_successful_power_off(self):
-        self.to_thread.return_value = 'ok'
+        self.run_in_thread.return_value = 'ok'
 
         await self.boiler_callback(self.make_callback())
 
         self.assertFalse(self.boiler.enabled)
-        self.to_thread.assert_awaited_once_with(self.boiler.power_off)
+        self.run_in_thread.assert_awaited_once_with(self.boiler.power_off)
         self.bot.send_message.assert_awaited_once_with(
             123,
             'Boiler disabled and powered off',
         )
 
     async def test_disable_reports_failed_power_off(self):
-        self.to_thread.return_value = 'error'
+        self.run_in_thread.return_value = 'error'
 
         await self.boiler_callback(self.make_callback())
 
         self.assertFalse(self.boiler.enabled)
-        self.to_thread.assert_awaited_once_with(self.boiler.power_off)
+        self.run_in_thread.assert_awaited_once_with(self.boiler.power_off)
         self.bot.send_message.assert_awaited_once_with(
             123,
             "Boiler disabled, but power off failed: 'error'",
@@ -224,15 +234,15 @@ class TelegramUICallbackTests(unittest.IsolatedAsyncioTestCase):
 
         for handler_index, data, command in cases:
             with self.subTest(data=data):
-                self.to_thread.reset_mock()
+                self.run_in_thread.reset_mock()
                 self.bot.send_message.reset_mock()
-                self.to_thread.return_value = 'ok'
+                self.run_in_thread.return_value = 'ok'
 
                 await self.dispatcher.callback_handlers[handler_index](
                     self.make_callback(data)
                 )
 
-                self.to_thread.assert_awaited_once_with(command)
+                self.run_in_thread.assert_awaited_once_with(command)
 
 
 class MainLifecycleTests(unittest.TestCase):
