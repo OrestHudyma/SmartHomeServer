@@ -81,6 +81,7 @@ else
     for python_candidate in \
         pyt \
         "$project_dir/.venv/bin/python" \
+        python3.8 \
         python3 \
         python; do
         if resolved_python="$(resolve_python "$python_candidate")" && \
