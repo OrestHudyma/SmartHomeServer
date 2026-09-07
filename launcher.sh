@@ -46,6 +46,11 @@ command -v timeout >/dev/null 2>&1 || fail "timeout is not installed"
 
 if [[ -n "${SMARTHOME_PYTHON:-}" ]]; then
     python_bin="$SMARTHOME_PYTHON"
+    if [[ "$python_bin" != */* ]]; then
+        if ! python_bin="$(command -v "$python_bin")"; then
+            fail "Python command is not found: $SMARTHOME_PYTHON"
+        fi
+    fi
 elif [[ -x "$project_dir/.venv/bin/python" ]]; then
     python_bin="$project_dir/.venv/bin/python"
 elif command -v python3 >/dev/null 2>&1; then
@@ -68,9 +73,9 @@ update_server() {
     local remote_ref
     local local_revision
     local remote_revision
+    local current_revision
 
-    current_branch="$(git branch --show-current)"
-    if [[ -z "$current_branch" ]]; then
+    if ! current_branch="$(git symbolic-ref --quiet --short HEAD)"; then
         warn "Detached HEAD; automatic update skipped"
         return
     fi
@@ -105,8 +110,11 @@ update_server() {
     fi
 
     remote_ref="refs/remotes/${update_remote}/${branch}"
-    local_revision="$(git rev-parse HEAD)"
-    remote_revision="$(git rev-parse "$remote_ref")"
+    if ! local_revision="$(git rev-parse --verify HEAD)" || \
+        ! remote_revision="$(git rev-parse --verify "$remote_ref")"; then
+        warn "Cannot resolve update revisions; starting the current version"
+        return
+    fi
 
     if [[ "$local_revision" == "$remote_revision" ]]; then
         log "Server is up to date"
@@ -118,9 +126,19 @@ update_server() {
         return
     fi
 
-    candidate_root="$(mktemp -d)"
+    if ! candidate_root="$(mktemp -d)"; then
+        warn "Cannot create a temporary update directory; starting the current version"
+        return
+    fi
     candidate_dir="$candidate_root/checkout"
-    git worktree add --quiet --detach "$candidate_dir" "$remote_revision"
+    if ! git worktree add --detach "$candidate_dir" "$remote_revision" \
+        >/dev/null; then
+        warn "Cannot prepare the update; starting the current version"
+        cleanup_candidate
+        candidate_dir=""
+        candidate_root=""
+        return
+    fi
 
     log "Testing update $remote_revision..."
     if ! (
@@ -140,13 +158,21 @@ update_server() {
     candidate_dir=""
     candidate_root=""
 
-    if [[ "$(git rev-parse HEAD)" != "$local_revision" ]] || \
+    if ! current_revision="$(git rev-parse --verify HEAD)"; then
+        warn "Cannot verify the repository state; automatic update skipped"
+        return
+    fi
+
+    if [[ "$current_revision" != "$local_revision" ]] || \
         ! git diff --quiet || ! git diff --cached --quiet; then
         warn "Repository changed while testing; automatic update skipped"
         return
     fi
 
-    git merge --ff-only "$remote_revision"
+    if ! git merge --ff-only "$remote_revision"; then
+        warn "Cannot apply the tested update; starting the current version"
+        return
+    fi
     log "Server updated to $remote_revision"
 }
 
