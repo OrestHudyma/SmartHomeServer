@@ -20,8 +20,19 @@ class LauncherTests(unittest.TestCase):
         candidates_start = launcher.index('for python_candidate in')
         candidates_end = launcher.index('; do', candidates_start)
         candidates = launcher[candidates_start:candidates_end]
+        candidate_names = [
+            line.strip().rstrip('\\').strip()
+            for line in candidates.splitlines()[1:]
+        ]
 
-        self.assertLess(candidates.index('pyt'), candidates.index('python3'))
+        self.assertLess(
+            candidate_names.index('pyt'),
+            candidate_names.index('python3'),
+        )
+        self.assertLess(
+            candidate_names.index('python3.8'),
+            candidate_names.index('python3'),
+        )
         self.assertIn(
             'python_runtime_is_usable "$resolved_python"',
             launcher,
